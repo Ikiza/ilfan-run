@@ -1,16 +1,161 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Ilfan Run</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ilfan Run - Route Creator + Höhenprofil</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <style>html,body,#map{height:100%;margin:0}</style>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css"/>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}body{font-family:system-ui,sans-serif;background:#f8f9fa}
+    header{background:linear-gradient(135deg,#2c5530,#4a9c5e);color:white;padding:1rem;position:sticky;top:0;z-index:1000;display:flex;justify-content:space-between;align-items:center}
+    h1{margin:0;font-size:1.5rem}
+    #controls{display:flex;gap:1rem;align-items:center;flex-wrap:wrap}
+    button{background:white;color:#2c5530;border:none;padding:.6rem 1.2rem;border-radius:6px;cursor:pointer;font-weight:500;transition:all .2s}
+    button:hover, button.active{background:#e8f5e8;transform:translateY(-1px)}
+    input[type="file"]{background:white;color:#2c5530;border:none;padding:.6rem 1.2rem;border-radius:6px;cursor:pointer}
+    #stats{background:white;padding:1rem;border-bottom:1px solid #ddd;display:flex;gap:2rem;font-weight:500;flex-wrap:wrap}
+    #map{height:calc(100vh-160px);width:100%}
+    #elevation{display:none;background:#f0f0f0;padding:1rem;margin-top:10px;border-radius:6px}
+    #elevationChart{height:200px;width:100%;background:white;border-radius:4px}
+  </style>
 </head>
 <body>
+  <header>
+    <h1>🏃‍♂️ Ilfan Run</h1>
+    <div id="controls">
+      <input type="file" id="gpxFile" accept=".gpx"/>
+      <button id="drawRoute">✏️ Draw Route</button>
+      <button id="clearMap">🗑️ Clear</button>
+      <button id="exportGPX">📥 Export GPX</button>
+    </div>
+  </header>
+  <div id="stats">
+    <span>📏 Distance: <strong id="distance">0</strong> km</span>
+    <span id="fileInfo">📁 File: <strong>-</strong></span>
+  </div>
+  <div id="elevation">
+    <strong>📈 Höhenprofil:</strong> <span id="elevationGain">0</span>m ↑ | <span id="elevationLoss">0</span>m ↓
+    <canvas id="elevationChart"></canvas>
+  </div>
   <div id="map"></div>
+
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+  <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
+  <script src="https://unpkg.com/togeojson@0.16.0/togeojson.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script>
-    const map=L.map('map').setView([49.4,8.7],12);
+    const map = L.map('map').setView([49.4, 8.7], 12);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+    
+    let drawnItems = L.featureGroup().addTo(map);
+    let drawControl, currentRoute = null;
+    let elevationChart = null;
+
+    // Toggle drawing
+    document.getElementById('drawRoute').onclick = () => {
+      const btn = document.getElementById('drawRoute');
+      if (drawControl) {
+        map.removeControl(drawControl);
+        drawControl = null;
+        btn.classList.remove('active');
+      } else {
+        drawControl = new L.Control.Draw({
+          draw: { polyline: true, polygon: false, rectangle: false, circle: false, marker: false },
+          edit: { featureGroup: drawnItems }
+        });
+        map.addControl(drawControl);
+        btn.classList.add('active');
+      }
+    };
+
+    // Draw events
+    map.on(L.Draw.Event.CREATED, (e) => {
+      const layer = e.layer;
+      drawnItems.addLayer(layer);
+      updateStats(layer.toGeoJSON());
+    });
+
+    // GPX upload
+    document.getElementById('gpxFile').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const text = await file.text();
+      const parser = new DOMParser();
+      const gpx = parser.parseFromString(text, 'text/xml');
+      const geojson = toGeoJSON.gpx(gpx);
+      
+      drawnItems.clearLayers();
+      currentRoute = L.geoJSON(geojson, {style: {color: '#0066cc', weight: 6}}).addTo(map);
+      drawnItems.addLayer(currentRoute);
+      map.fitBounds(currentRoute.getBounds());
+      updateStats(geojson);
+      document.getElementById('fileInfo').innerHTML = `📁 File: <strong>${file.name}</strong>`;
+    });
+
+    // Clear
+    document.getElementById('clearMap').onclick = () => {
+      drawnItems.clearLayers();
+      currentRoute = null;
+      if (drawControl) {
+        map.removeControl(drawControl);
+        drawControl = null;
+        document.getElementById('drawRoute').classList.remove('active');
+      }
+      updateStats(null);
+      document.getElementById('fileInfo').innerHTML = '📁 File: <strong>-</strong>';
+    };
+
+    // Export GPX
+    document.getElementById('exportGPX').onclick = () => {
+      if (!drawnItems.getLayers().length) return alert('Draw or load a route first!');
+      const gj = drawnItems.toGeoJSON();
+      const gpx = tokml(togeojson.gpx(gj));
+      const blob = new Blob([gpx], {type: 'application/gpx+xml'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'ilfan-run.gpx';
+      a.click();
+    };
+
+    function updateStats(geojson) {
+      if (!geojson) {
+        document.getElementById('distance').textContent = '0';
+        document.getElementById('elevation').style.display = 'none';
+        return;
+      }
+      const distance = turf.length(geojson, {units: 'kilometers'});
+      document.getElementById('distance').textContent = distance.toFixed(1);
+      
+      // Fake elevation (real API later)
+      const elevGain = Math.round(distance * 25); // ~25m/km trails
+      document.getElementById('elevationGain').textContent = elevGain;
+      document.getElementById('elevationLoss').textContent = Math.round(elevGain * 0.8);
+      document.getElementById('elevation').style.display = 'block';
+      
+      // Simple elevation chart
+      updateElevationChart(geojson);
+    }
+
+    function updateElevationChart(geojson) {
+      const ctx = document.getElementById('elevationChart').getContext('2d');
+      if (elevationChart) elevationChart.destroy();
+      elevationChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: Array(20).fill().map((_, i) => (i * 1).toFixed(1)),
+          datasets: [{
+            label: 'Elevation (m)',
+            data: Array(20).fill().map(() => Math.random() * 100 + 200),
+            borderColor: '#0066cc',
+            fill: false
+          }]
+        },
+        options: {scales: {y: {beginAtZero: false}}}
+      });
+    }
   </script>
 </body>
 </html>
