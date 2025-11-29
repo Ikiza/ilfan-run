@@ -1,22 +1,33 @@
-k<!DOCTYPE html>
+<!DOCTYPE html>
 <html>
 <head>
-  <title>Test Marker</title>
+  <title>Test Backend Route</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>#map{height:500px}</style>
 </head>
 <body>
   <div id="map"></div>
+  <button onclick="planTestRoute()" style="position:absolute;top:10px;left:10px;z-index:1000;padding:10px;">Plan Test Route</button>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
   <script>
     const map = L.map('map').setView([49.4, 8.7], 12);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
     
-    let marker = null;
-    map.on('click', function(e) {
-      if (marker) map.removeLayer(marker);
-      marker = L.marker(e.latlng).addTo(map).bindPopup('Start: ' + e.latlng.lat.toFixed(4) + ', ' + e.latlng.lng.toFixed(4)).openPopup();
-    });
+    async function planTestRoute() {
+      const url = 'https://ilfan-run-backend.onrender.com/route?startLat=49.4&startLon=8.7&endLat=49.42&endLon=8.75';
+      
+      try {
+        const res = await fetch(url);
+        const data = await res.json();
+        alert('Backend works! Distance: ' + (data.distance_m/1000).toFixed(1) + 'km');
+        
+        const layer = L.geoJSON(data.geojson, { style: { color: '#ff6600', weight: 5 } }).addTo(map);
+        map.fitBounds(layer.getBounds());
+      } catch (err) {
+        alert('Backend error: ' + err);
+      }
+    }
   </script>
 </body>
 </html>
