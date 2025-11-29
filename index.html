@@ -6,7 +6,6 @@
   <title>Ilfan Run - GPX Planner</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css">
-  <link rel="stylesheet" href="https://unpkg.com/@raruto/leaflet-elevation/dist/leaflet-elevation.min.css">
   <style>
     *{margin:0;padding:0;box-sizing:border-box}
     body{font-family:system-ui,sans-serif}
@@ -15,8 +14,7 @@
     button,input[type="file"]{background:white;color:#2c5530;border:none;padding:.6rem 1.2rem;border-radius:6px;cursor:pointer}
     button:hover{background:#e8f5e8}
     #stats{background:#f0f0f0;padding:1rem;display:flex;gap:2rem;font-weight:500;flex-wrap:wrap}
-    #map{height:calc(100vh - 240px);width:100%}
-    #elevation{height:200px;}
+    #map{height:calc(100vh - 140px);width:100%}
   </style>
 </head>
 <body>
@@ -33,14 +31,11 @@
     <span>📁 File/Route: <strong id="routeName">-</strong></span>
   </div>
   <div id="map"></div>
-  <div id="elevation"></div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tmcw/togeojson@4.5.0/dist/togeojson.umd.js"></script>
   <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
-  <script src="https://unpkg.com/d3@7/dist/d3.min.js"></script>
-  <script src="https://unpkg.com/@raruto/leaflet-elevation/dist/leaflet-elevation.min.js"></script>
   <script>
     const map = L.map('map').setView([49.4, 8.7], 12);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -48,14 +43,6 @@
     }).addTo(map);
 
     const drawnItems = L.featureGroup().addTo(map);
-
-    const elevationControl = L.control.elevation({
-      theme: "steelblue-theme",
-      detached: true,
-      elevationDiv: "#elevation",
-      collapsed: false
-    });
-    elevationControl.addTo(map);
 
     let startMarker = null;
     let endMarker = null;
@@ -104,8 +91,6 @@
       drawnItems.addLayer(layer);
       const gj = layer.toGeoJSON();
       updateDistance(gj);
-      elevationControl.clear();
-      elevationControl.addData(gj);
       document.getElementById('routeName').textContent = 'Drawn route';
     });
 
@@ -122,8 +107,6 @@
       drawnItems.addLayer(layer);
       map.fitBounds(layer.getBounds());
       updateDistance(geojson);
-      elevationControl.clear();
-      elevationControl.addData(geojson);
       document.getElementById('routeName').textContent = file.name;
     });
 
@@ -131,7 +114,6 @@
       drawnItems.clearLayers();
       document.getElementById('distance').textContent = '0';
       document.getElementById('routeName').textContent = '-';
-      elevationControl.clear();
       if (startMarker) map.removeLayer(startMarker);
       if (endMarker) map.removeLayer(endMarker);
       startMarker = endMarker = null;
@@ -161,8 +143,6 @@
         drawnItems.addLayer(layer);
         map.fitBounds(layer.getBounds());
         updateDistance(data.geojson);
-        elevationControl.clear();
-        elevationControl.addData(data.geojson);
         document.getElementById('routeName').textContent =
           (data.distance_m / 1000).toFixed(1) + ' km GraphHopper route';
       } catch (err) {
