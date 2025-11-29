@@ -27,7 +27,7 @@
   </header>
   <div id="stats">
     <span>📏 Distance: <strong id="distance">0</strong> km</span>
-    <span>📁 File: <strong id="routeName">-</strong></span>
+    <span>📁 File/Route: <strong id="routeName">-</strong></span>
   </div>
   <div id="map"></div>
 
@@ -43,6 +43,36 @@
 
     const drawnItems = L.featureGroup().addTo(map);
 
+    // Clicks for start/end markers
+    let startMarker = null;
+    let endMarker = null;
+    let startLatLng = null;
+    let endLatLng = null;
+
+    map.on('click', (e) => {
+      if (!startMarker) {
+        startLatLng = e.latlng;
+        startMarker = L.marker(startLatLng, { draggable: true }).addTo(map);
+        startMarker.bindPopup('Start').openPopup();
+        startMarker.on('dragend', ev => {
+          startLatLng = ev.target.getLatLng();
+        });
+      } else if (!endMarker) {
+        endLatLng = e.latlng;
+        endMarker = L.marker(endLatLng, { draggable: true }).addTo(map);
+        endMarker.bindPopup('End').openPopup();
+        endMarker.on('dragend', ev => {
+          endLatLng = ev.target.getLatLng();
+        });
+      } else {
+        map.removeLayer(startMarker);
+        map.removeLayer(endMarker);
+        startMarker = endMarker = null;
+        startLatLng = endLatLng = null;
+      }
+    });
+
+    // Draw control for manual polylines
     const drawControl = new L.Control.Draw({
       draw: {
         polyline: true,
@@ -65,6 +95,7 @@
       document.getElementById('routeName').textContent = 'Drawn route';
     });
 
+    // Load GPX file
     document.getElementById('gpxFile').addEventListener('change', async (e) => {
       const file = e.target.files[0];
       if (!file) return;
@@ -81,26 +112,47 @@
       document.getElementById('routeName').textContent = file.name;
     });
 
+    // Clear everything
     document.getElementById('clearMap').onclick = () => {
       drawnItems.clearLayers();
       document.getElementById('distance').textContent = '0';
       document.getElementById('routeName').textContent = '-';
+
+      if (startMarker) map.removeLayer(startMarker);
+      if (endMarker) map.removeLayer(endMarker);
+      startMarker = endMarker = null;
+      startLatLng = endLatLng = null;
     };
 
+    // Call backend with chosen start/end
     async function loadBackendRoute() {
+      if (!startLatLng || !endLatLng) {
+        alert('Click on the map to set start and end points first.');
+        return;
+      }
+
       const url = 'https://ilfan-run-backend.onrender.com/route'
-        + '?startLat=49.4&startLon=8.7&endLat=49.42&endLon=8.75';
+        + `?startLat=${startLatLng.lat}&startLon=${startLatLng.lng}`
+        + `&endLat=${endLatLng.lat}&endLon=${endLatLng.lng}`;
 
-      const res = await fetch(url);
-      const data = await res.json();
+      try {
+        const res = await fetch(url);
+        if (!res.ok) {
+          alert('Routing failed');
+          return;
+        }
+        const data = await res.json();
 
-      drawnItems.clearLayers();
-      const layer = L.geoJSON(data.geojson, { style: { color: '#ff6600', weight: 5 } });
-      drawnItems.addLayer(layer);
-      map.fitBounds(layer.getBounds());
-      updateDistance(data.geojson);
-      document.getElementById('routeName').textContent =
-        (data.distance_m / 1000).toFixed(1) + ' km GraphHopper route';
+        drawnItems.clearLayers();
+        const layer = L.geoJSON(data.geojson, { style: { color: '#ff6600', weight: 5 } });
+        drawnItems.addLayer(layer);
+        map.fitBounds(layer.getBounds());
+        updateDistance(data.geojson);
+        document.getElementById('routeName').textContent =
+          (data.distance_m / 1000).toFixed(1) + ' km GraphHopper route';
+      } catch (err) {
+        alert('Routing error: ' + err);
+      }
     }
 
     document.getElementById('planRoute').onclick = loadBackendRoute;
