@@ -14,9 +14,7 @@
     button,input[type="file"]{background:white;color:#2c5530;border:none;padding:.6rem 1.2rem;border-radius:6px;cursor:pointer}
     button:hover{background:#e8f5e8}
     #stats{background:#f0f0f0;padding:1rem;display:flex;gap:2rem;font-weight:500;flex-wrap:wrap}
-    #map{height:calc(100vh - 180px);width:100%}
-    #elevation{background:#e8f5e8;padding:1rem;border-top:1px solid #ddd}
-    #elevation span{font-weight:500}
+    #map{height:calc(100vh - 140px);width:100%}
   </style>
 </head>
 <body>
@@ -30,10 +28,7 @@
   </header>
   <div id="stats">
     <span>📏 Distance: <strong id="distance">0</strong> km</span>
-    <span>📁 Route: <strong id="routeName">-</strong></span>
-  </div>
-  <div id="elevation" style="display:none">
-    <span>⛰️ Elevation: <strong id="elevationStats">-</strong></span>
+    <span>📁 File/Route: <strong id="routeName">-</strong></span>
   </div>
   <div id="map"></div>
 
@@ -59,12 +54,16 @@
         startLatLng = e.latlng;
         startMarker = L.marker(startLatLng, { draggable: true }).addTo(map);
         startMarker.bindPopup('Start').openPopup();
-        startMarker.on('dragend', ev => startLatLng = ev.target.getLatLng());
+        startMarker.on('dragend', ev => {
+          startLatLng = ev.target.getLatLng();
+        });
       } else if (!endMarker) {
         endLatLng = e.latlng;
         endMarker = L.marker(endLatLng, { draggable: true }).addTo(map);
         endMarker.bindPopup('End').openPopup();
-        endMarker.on('dragend', ev => endLatLng = ev.target.getLatLng());
+        endMarker.on('dragend', ev => {
+          endLatLng = ev.target.getLatLng();
+        });
       } else {
         map.removeLayer(startMarker);
         map.removeLayer(endMarker);
@@ -74,7 +73,14 @@
     });
 
     const drawControl = new L.Control.Draw({
-      draw: { polyline: true, polygon: false, rectangle: false, circle: false, marker: false, circlemarker: false },
+      draw: {
+        polyline: true,
+        polygon: false,
+        rectangle: false,
+        circle: false,
+        marker: false,
+        circlemarker: false
+      },
       edit: { featureGroup: drawnItems }
     });
     map.addControl(drawControl);
@@ -86,7 +92,6 @@
       const gj = layer.toGeoJSON();
       updateDistance(gj);
       document.getElementById('routeName').textContent = 'Drawn route';
-      document.getElementById('elevation').style.display = 'none';
     });
 
     document.getElementById('gpxFile').addEventListener('change', async (e) => {
@@ -103,14 +108,12 @@
       map.fitBounds(layer.getBounds());
       updateDistance(geojson);
       document.getElementById('routeName').textContent = file.name;
-      document.getElementById('elevation').style.display = 'none';
     });
 
     document.getElementById('clearMap').onclick = () => {
       drawnItems.clearLayers();
       document.getElementById('distance').textContent = '0';
       document.getElementById('routeName').textContent = '-';
-      document.getElementById('elevation').style.display = 'none';
       if (startMarker) map.removeLayer(startMarker);
       if (endMarker) map.removeLayer(endMarker);
       startMarker = endMarker = null;
@@ -140,16 +143,18 @@
         drawnItems.addLayer(layer);
         map.fitBounds(layer.getBounds());
         updateDistance(data.geojson);
-        
-        // Show elevation stats from 3D coordinates
-        const coords = data.geojson.geometry.coordinates;
-        const elevations = coords.map(c => c[2]).filter(e => e !== undefined);
-        if (elevations.length > 0) {
-          const minEle = Math.min(...elevations).toFixed(0);
-          const maxEle = Math.max(...elevations).toFixed(0);
-          document.getElementById('elevationStats').textContent = `${minEle}m - ${maxEle}m`;
-          document.getElementById('elevation').style.display = 'flex';
-        }
-        
-        document.getElementById('routeName
+        document.getElementById('routeName').textContent =
+          (data.distance_m / 1000).toFixed(1) + ' km GraphHopper route';
+      } catch (err) {
+        alert('Routing error: ' + err);
+      }
+    };
+
+    function updateDistance(geojson) {
+      const dist = turf.length(geojson, { units: 'kilometers' });
+      document.getElementById('distance').textContent = dist.toFixed(1);
+    }
+  </script>
+</body>
+</html>
 
